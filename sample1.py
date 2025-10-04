@@ -18,8 +18,10 @@ def create_pdf(report_date, department, current_activities, reflections, next_ac
         pdf.add_font('BIZ-UDGothic', '', font_path_regular, uni=True)
         pdf.add_font('BIZ-UDGothic', 'B', font_path_bold, uni=True)
     except Exception as e:
-        st.warning(f"フォントファイルの読み込みに失敗しました: {e}。PDFの日本語表示に問題がある可能性があります。Arialを代替フォントとして使用します。")
-        pdf.add_font('BIZ-UDGothic', '', 'arial.ttf', uni=True)
+        # st.warning(f"フォントファイルの読み込みに失敗しました: {e}。PDFの日本語表示に問題がある可能性があります。Arialを代替フォントとして使用します。")
+        # In a deployed environment, st.warning might not be visible easily. Log to console instead.
+        print(f"WARNING: Font file loading failed: {e}. PDF Japanese display might have issues. Using Arial as fallback.")
+        pdf.add_font('BIZ-UDGothic', '', 'arial.ttf', uni=True) # Assuming arial.ttf is available or similar
         pdf.add_font('BIZ-UDGothic', 'B', 'arialbd.ttf', uni=True)
 
 
@@ -80,11 +82,14 @@ def create_pdf(report_date, department, current_activities, reflections, next_ac
     pdf.multi_cell(0, 7, "(次年度以降の改善材料になりますので詳細にお願いします)", border='LR', align='L', ln=1)
     
     if reflections:
+        # Assume 7 lines of 7pt height as a base for reflection box.
+        # This will create a box roughly 49 units high if content is single line,
+        # and expand if text wraps.
         pdf.multi_cell(0, 7, reflections, border='LRB', align='L', ln=1)
     else:
-        # If empty, ensure a substantial empty box is drawn.
-        # Estimate ~5 lines of text height for the empty box if content is usually large.
-        pdf.cell(0, 7 * 5, "", border='LRB', align='L', ln=1) 
+        # If empty, draw a box that is roughly 7 lines high (7*7=49 units).
+        # Adjusting the height here to match the typical expected input size.
+        pdf.cell(0, 49, "", border='LRB', align='L', ln=1) 
         
     pdf.set_font('BIZ-UDGothic', '', 12)
 
@@ -126,6 +131,7 @@ if 'num_next_activities' not in st.session_state:
 
 st.header("報告書入力フォーム")
 
+# --- Start of the main form definition ---
 with st.form("report_form"):
     st.subheader("1. 報告日")
     report_date = st.date_input("報告書の日付", datetime.now())
@@ -157,15 +163,15 @@ with st.form("report_form"):
             content_input = st.text_area(f"事業内容 {i+1}", key=f"current_content_{i}", height=50, label_visibility="collapsed")
         current_activity_data.append({"日程": date_input, "事業内容報告": content_input})
 
-    if st.button("事業内容報告を追加", key="add_current_activity"):
+    # This button adds more rows to the input, but doesn't submit the form
+    if st.button("事業内容報告を追加", key="add_current_activity_button"): # Changed key to avoid conflict
         st.session_state.num_current_activities += 1
         st.rerun()
 
     current_activities_df = pd.DataFrame(current_activity_data).dropna(how='all')
 
     st.subheader("4. 活動の反省と課題") # 仕様書4
-    # Set height for a larger text area, roughly corresponding to PDF's multi_cell height
-    # A multi_cell with height 7 and 5 lines would be 35. So, use a slightly larger Streamlit height.
+    # Set height for a larger text area
     reflections = st.text_area(
         "次年度以降の改善材料になりますので詳細にお願いします。",
         value=st.session_state.get('reflections', ''),
@@ -193,13 +199,16 @@ with st.form("report_form"):
             content_input = st.text_area(f"活動予定 {i+1}", key=f"next_content_{i}", height=50, label_visibility="collapsed")
         next_activity_data.append({"日程": date_input, "次回運営委員会までの活動予定": content_input})
 
-    if st.button("活動予定を追加", key="add_next_activity"):
+    # This button adds more rows to the input, but doesn't submit the form
+    if st.button("活動予定を追加", key="add_next_activity_button"): # Changed key to avoid conflict
         st.session_state.num_next_activities += 1
         st.rerun()
 
     next_activities_df = pd.DataFrame(next_activity_data).dropna(how='all')
 
+    # --- This is the ONLY submit button for the entire form ---
     submitted = st.form_submit_button("入力完了 - プレビュー表示 (6. 入力完了ボタン)") # 仕様書6
+# --- End of the main form definition ---
 
 if submitted:
     st.subheader("完成版プレビュー")
@@ -220,7 +229,7 @@ if submitted:
 
     st.markdown("### 活動の反省と課題")
     st.markdown("(次年度以降の改善材料になりますので詳細にお願いします)")
-    st.write(reflections) # 使用者の入力そのままを表示
+    st.write(reflections)
     st.markdown("<br>")
 
     st.markdown("### 次回運営委員会までの活動予定")
