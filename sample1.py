@@ -2,12 +2,27 @@ import streamlit as st
 from fpdf import FPDF
 import pandas as pd
 from datetime import datetime
+import os # osモジュールを追加
 
 # --- PDF Generation Function ---
 def create_pdf(report_date, department, current_activities, reflections, next_activities):
     pdf = FPDF(format='A4')
-    pdf.add_font('BIZ-UDGothic', '', 'BIZ-UDGothic-Regular.ttf', uni=True)
-    pdf.add_font('BIZ-UDGothic', 'B', 'BIZ-UDGothic-Bold.ttf', uni=True)
+    
+    # Check if font files exist before adding them
+    # Assuming font files are in the same directory as the script or accessible via a relative path
+    script_dir = os.path.dirname(__file__) if '__file__' in locals() else os.getcwd()
+    font_path_regular = os.path.join(script_dir, 'BIZ-UDGothic-Regular.ttf')
+    font_path_bold = os.path.join(script_dir, 'BIZ-UDGothic-Bold.ttf')
+
+    if not os.path.exists(font_path_regular):
+        st.warning(f"フォントファイルが見つかりません: {font_path_regular}。PDFの日本語表示に問題がある可能性があります。")
+        # Fallback to a generic font if BIZ-UDGothic is not found
+        pdf.add_font('BIZ-UDGothic', '', 'arial.ttf', uni=True) # Assuming arial.ttf is available or similar
+        pdf.add_font('BIZ-UDGothic', 'B', 'arialbd.ttf', uni=True)
+    else:
+        pdf.add_font('BIZ-UDGothic', '', font_path_regular, uni=True)
+        pdf.add_font('BIZ-UDGothic', 'B', font_path_bold, uni=True)
+
     pdf.add_page()
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.set_font('BIZ-UDGothic', '', 12)
@@ -20,7 +35,9 @@ def create_pdf(report_date, department, current_activities, reflections, next_ac
     pdf.set_font('BIZ-UDGothic', '', 10)
     pdf.set_y(35)
     pdf.set_x(140)
-    pdf.cell(0, 10, f"令和{report_date.year - 2018}年 {report_date.month}月 {report_date.day}日", align='R', ln=1)
+    # Calculate year based on Japanese Imperial calendar (Reiwa era starts 2019)
+    reiwa_year = report_date.year - 2018
+    pdf.cell(0, 10, f"令和{reiwa_year}年 {report_date.month}月 {report_date.day}日", align='R', ln=1)
 
     # Department
     pdf.set_y(50)
@@ -32,7 +49,7 @@ def create_pdf(report_date, department, current_activities, reflections, next_ac
     pdf.cell(pdf.get_string_width(department) + 4, 10, department, align='C', border=1, fill=True)
     pdf.ln(15) # Add space after department
 
-    # Current Activity Report
+    # Current Activity Report (仕様書3)
     pdf.set_font('BIZ-UDGothic', '', 12)
     pdf.set_fill_color(200, 200, 200) # Gray background for headers
     pdf.cell(30, 10, "日程", border=1, align='C', fill=True)
@@ -43,37 +60,36 @@ def create_pdf(report_date, department, current_activities, reflections, next_ac
         date_str = str(row["日程"])
         content_str = str(row["事業内容報告"])
 
-        # Calculate height for multiline cells
-        # Need a way to estimate height for Japanese text
-        # For simplicity, let's just make sure content cell is wide enough
         pdf.set_x(10)
-        # Store current y position
         start_y = pdf.get_y()
-        # Draw date cell
         pdf.multi_cell(30, 7, date_str, border='LR', align='C')
         end_y_date = pdf.get_y()
-        # Reset y to start for content cell
+        
+        # Adjust x, y for the content cell
         pdf.set_xy(40, start_y)
-        # Draw content cell
         pdf.multi_cell(160, 7, content_str, border='R', align='L')
-        end_y_content = pdf.get_y()
-
-        # Find the maximum height and draw bottom border across both cells
-        max_y = max(end_y_date, end_y_content)
+        
+        max_y = max(end_y_date, pdf.get_y()) # Get the max y position of the two cells
         pdf.line(10, max_y, 200, max_y) # Draw bottom line
         pdf.set_y(max_y) # Set current position to below the row
 
-    # Reflections and Challenges
+    # Reflections and Challenges (仕様書4)
     pdf.ln(10)
     pdf.set_fill_color(200, 200, 200)
     pdf.cell(0, 10, "活動の反省と課題", border=1, align='C', fill=True, ln=1)
     pdf.set_fill_color(255, 255, 255)
     pdf.set_font('BIZ-UDGothic', '', 10)
     pdf.multi_cell(0, 7, "(次年度以降の改善材料になりますので詳細にお願いします)", border='LR', align='L', ln=1)
-    pdf.multi_cell(0, 7, reflections, border='LRB', align='L', ln=1)
-    pdf.set_font('BIZ-UDGothic', '', 12)
+    
+    # Ensure reflections text is wrapped and displayed
+    if reflections: # Only add if reflections text is not empty
+        pdf.multi_cell(0, 7, reflections, border='LRB', align='L', ln=1)
+    else: # If empty, still draw bottom border for the box
+        pdf.cell(0, 7, "", border='LRB', align='L', ln=1)
+        
+    pdf.set_font('BIZ-UDGothic', '', 12) # Reset font size
 
-    # Next Activities
+    # Next Activities (仕様書5)
     pdf.ln(10)
     pdf.set_fill_color(200, 200, 200)
     pdf.cell(30, 10, "日程", border=1, align='C', fill=True)
@@ -88,8 +104,10 @@ def create_pdf(report_date, department, current_activities, reflections, next_ac
         start_y = pdf.get_y()
         pdf.multi_cell(30, 7, date_str, border='LR', align='C')
         end_y_date = pdf.get_y()
+        
         pdf.set_xy(40, start_y)
         pdf.multi_cell(160, 7, content_str, border='R', align='L')
+        
         max_y = max(end_y_date, pdf.get_y())
         pdf.line(10, max_y, 200, max_y)
         pdf.set_y(max_y)
@@ -101,9 +119,11 @@ def create_pdf(report_date, department, current_activities, reflections, next_ac
 st.set_page_config(layout="wide")
 st.title("事業内容報告書 作成アプリ")
 
-# Ensure 'BIZ-UDGothic-Regular.ttf' and 'BIZ-UDGothic-Bold.ttf' are in the same directory as this script,
-# or provide the full path to the font files.
-# You can download them from: https://fonts.google.com/specimen/BIZ+UDGothic
+# Initialize session state for dynamic inputs if not already present
+if 'num_current_activities' not in st.session_state:
+    st.session_state.num_current_activities = 3 # Default to 3 rows
+if 'num_next_activities' not in st.session_state:
+    st.session_state.num_next_activities = 3 # Default to 3 rows
 
 st.header("報告書入力フォーム")
 
@@ -123,21 +143,21 @@ with st.form("report_form"):
     st.write("活動日程と内容をそれぞれ入力してください。")
 
     # Dynamic input for current activities
-    num_current_activities = st.session_state.get('num_current_activities', 3)
     current_activity_data = []
-
-    cols = st.columns([1, 3])
-    with cols[0]:
+    
+    # Header for current activities table
+    cols_header_current = st.columns([1, 3])
+    with cols_header_current[0]:
         st.markdown("**日程**")
-    with cols[1]:
+    with cols_header_current[1]:
         st.markdown("**事業内容報告**")
 
-    for i in range(num_current_activities):
+    for i in range(st.session_state.num_current_activities):
         cols = st.columns([1, 3])
         with cols[0]:
-            date_input = st.text_input(f"日程 {i+1}", key=f"current_date_{i}")
+            date_input = st.text_input(f"日程 {i+1}", key=f"current_date_{i}", label_visibility="collapsed")
         with cols[1]:
-            content_input = st.text_area(f"事業内容 {i+1}", key=f"current_content_{i}", height=50)
+            content_input = st.text_area(f"事業内容 {i+1}", key=f"current_content_{i}", height=50, label_visibility="collapsed")
         current_activity_data.append({"日程": date_input, "事業内容報告": content_input})
 
     if st.button("事業内容報告を追加", key="add_current_activity"):
@@ -146,31 +166,34 @@ with st.form("report_form"):
 
     current_activities_df = pd.DataFrame(current_activity_data).dropna(how='all')
 
-    st.subheader("4. 活動の反省と課題")
+    st.subheader("4. 活動の反省と課題") # 仕様書4
     reflections = st.text_area(
         "次年度以降の改善材料になりますので詳細にお願いします。",
+        value=st.session_state.get('reflections', ''), # Retain value on rerun
+        key="reflections_input",
         height=150
     )
+    st.session_state.reflections = reflections # Store current value
 
-    st.subheader("5. 次回運営委員会までの活動予定 (枠内下部)")
+    st.subheader("5. 次回運営委員会までの活動予定 (枠内下部)") # 仕様書5
     st.write("次回までの活動日程と内容をそれぞれ入力してください。")
 
     # Dynamic input for next activities
-    num_next_activities = st.session_state.get('num_next_activities', 3)
     next_activity_data = []
 
-    cols = st.columns([1, 3])
-    with cols[0]:
+    # Header for next activities table
+    cols_header_next = st.columns([1, 3])
+    with cols_header_next[0]:
         st.markdown("**日程**")
-    with cols[1]:
+    with cols_header_next[1]:
         st.markdown("**次回運営委員会までの活動予定**")
 
-    for i in range(num_next_activities):
+    for i in range(st.session_state.num_next_activities):
         cols = st.columns([1, 3])
         with cols[0]:
-            date_input = st.text_input(f"日程 {i+1}", key=f"next_date_{i}")
+            date_input = st.text_input(f"日程 {i+1}", key=f"next_date_{i}", label_visibility="collapsed")
         with cols[1]:
-            content_input = st.text_area(f"活動予定 {i+1}", key=f"next_content_{i}", height=50)
+            content_input = st.text_area(f"活動予定 {i+1}", key=f"next_content_{i}", height=50, label_visibility="collapsed")
         next_activity_data.append({"日程": date_input, "次回運営委員会までの活動予定": content_input})
 
     if st.button("活動予定を追加", key="add_next_activity"):
@@ -179,31 +202,36 @@ with st.form("report_form"):
 
     next_activities_df = pd.DataFrame(next_activity_data).dropna(how='all')
 
-    submitted = st.form_submit_button("入力完了 - プレビュー表示")
+    submitted = st.form_submit_button("入力完了 - プレビュー表示 (6. 入力完了ボタン)") # 仕様書6
 
 if submitted:
     st.subheader("完成版プレビュー")
 
     # Display a basic HTML/Markdown preview
-    st.markdown(f"***運営委員会にて提出をお願いします***")
-    st.markdown(f"## 事業内容報告書")
-    st.markdown(f"<div style='text-align: right;'>令和{report_date.year - 2018}年 {report_date.month}月 {report_date.day}日</div>", unsafe_allow_html=True)
-    st.markdown(f"### 学年")
-    st.markdown(f"<div style='background-color: #D3D3D3; padding: 5px; border: 1px solid black; display: inline-block;'>**{department}**</div>", unsafe_allow_html=True)
-    st.markdown("---")
+    st.markdown(f"<div style='text-align: center; font-weight: bold;'>***運営委員会にて提出をお願いします***</div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='text-align: center; font-weight: bold; font-size: 24px;'>事業内容報告書</div>", unsafe_allow_html=True)
+    
+    # Calculate year based on Japanese Imperial calendar (Reiwa era starts 2019)
+    reiwa_year = report_date.year - 2018
+    st.markdown(f"<div style='text-align: right; font-size: 14px;'>令和{reiwa_year}年 {report_date.month}月 {report_date.day}日</div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='font-size: 16px; margin-top: 10px;'>学年</div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='background-color: #D3D3D3; padding: 5px; border: 1px solid black; display: inline-block; font-weight: bold; font-size: 18px;'>{department}</div>", unsafe_allow_html=True)
+    st.markdown("<hr style='border: 0; height: 1px; background: #333; margin: 1em 0;' />") # Simple separator
 
     st.markdown("### 事業内容報告")
     st.dataframe(current_activities_df, use_container_width=True, hide_index=True)
+    st.markdown("<br>") # Add some space
 
-    st.markdown("### 活動の反省と課題")
+    st.markdown("### 活動の反省と課題") # 仕様書4
     st.markdown("(次年度以降の改善材料になりますので詳細にお願いします)")
-    st.write(reflections)
+    st.write(reflections) # 使用者の入力そのままを表示
+    st.markdown("<br>") # Add some space
 
-    st.markdown("### 次回運営委員会までの活動予定")
+    st.markdown("### 次回運営委員会までの活動予定") # 仕様書5
     st.dataframe(next_activities_df, use_container_width=True, hide_index=True)
-    st.markdown("---")
+    st.markdown("<hr style='border: 0; height: 1px; background: #333; margin: 1em 0;' />") # Simple separator
 
-    # PDF Download Button
+    # PDF Download Button (仕様書7)
     st.subheader("PDFダウンロード")
     pdf_output = create_pdf(report_date, department, current_activities_df, reflections, next_activities_df)
     st.download_button(
@@ -212,9 +240,3 @@ if submitted:
         file_name=f"事業内容報告書_{department}_{report_date.strftime('%Y%m%d')}.pdf",
         mime="application/pdf"
     )
-
-# Initialize session state for dynamic inputs if not already present
-if 'num_current_activities' not in st.session_state:
-    st.session_state.num_current_activities = 3
-if 'num_next_activities' not in st.session_state:
-    st.session_state.num_next_activities = 3
