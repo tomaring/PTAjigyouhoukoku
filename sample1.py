@@ -8,20 +8,16 @@ import os
 def create_pdf(report_date, department, current_activities, reflections, next_activities):
     pdf = FPDF(format='A4')
     
-    # Check if font files exist before adding them
     script_dir = os.path.dirname(__file__) if '__file__' in locals() else os.getcwd()
     font_path_regular = os.path.join(script_dir, 'BIZ-UDGothic-Regular.ttf')
     font_path_bold = os.path.join(script_dir, 'BIZ-UDGothic-Bold.ttf')
 
-    # Fallback to a generic font if BIZ-UDGothic is not found
     try:
         pdf.add_font('BIZ-UDGothic', '', font_path_regular, uni=True)
         pdf.add_font('BIZ-UDGothic', 'B', font_path_bold, uni=True)
     except Exception as e:
-        # st.warning(f"フォントファイルの読み込みに失敗しました: {e}。PDFの日本語表示に問題がある可能性があります。Arialを代替フォントとして使用します。")
-        # In a deployed environment, st.warning might not be visible easily. Log to console instead.
         print(f"WARNING: Font file loading failed: {e}. PDF Japanese display might have issues. Using Arial as fallback.")
-        pdf.add_font('BIZ-UDGothic', '', 'arial.ttf', uni=True) # Assuming arial.ttf is available or similar
+        pdf.add_font('BIZ-UDGothic', '', 'arial.ttf', uni=True)
         pdf.add_font('BIZ-UDGothic', 'B', 'arialbd.ttf', uni=True)
 
 
@@ -82,13 +78,8 @@ def create_pdf(report_date, department, current_activities, reflections, next_ac
     pdf.multi_cell(0, 7, "(次年度以降の改善材料になりますので詳細にお願いします)", border='LR', align='L', ln=1)
     
     if reflections:
-        # Assume 7 lines of 7pt height as a base for reflection box.
-        # This will create a box roughly 49 units high if content is single line,
-        # and expand if text wraps.
         pdf.multi_cell(0, 7, reflections, border='LRB', align='L', ln=1)
     else:
-        # If empty, draw a box that is roughly 7 lines high (7*7=49 units).
-        # Adjusting the height here to match the typical expected input size.
         pdf.cell(0, 49, "", border='LRB', align='L', ln=1) 
         
     pdf.set_font('BIZ-UDGothic', '', 12)
@@ -123,11 +114,12 @@ def create_pdf(report_date, department, current_activities, reflections, next_ac
 st.set_page_config(layout="wide")
 st.title("事業内容報告書 作成アプリ")
 
-# Initialize session state for dynamic inputs if not already present
 if 'num_current_activities' not in st.session_state:
-    st.session_state.num_current_activities = 5 # Default to 5 rows for current activities
+    st.session_state.num_current_activities = 5
 if 'num_next_activities' not in st.session_state:
-    st.session_state.num_next_activities = 5 # Default to 5 rows for next activities
+    st.session_state.num_next_activities = 5
+if 'reflections' not in st.session_state: # Ensure reflections are initialized
+    st.session_state.reflections = ''
 
 st.header("報告書入力フォーム")
 
@@ -144,7 +136,7 @@ with st.form("report_form"):
     ]
     department = st.selectbox("担当部署を選択してください", departments)
 
-    st.subheader("3. 事業内容報告 (枠内上部)") # 仕様書3
+    st.subheader("3. 事業内容報告 (枠内上部)")
     st.write("活動日程と内容をそれぞれ入力してください。")
 
     current_activity_data = []
@@ -163,24 +155,26 @@ with st.form("report_form"):
             content_input = st.text_area(f"事業内容 {i+1}", key=f"current_content_{i}", height=50, label_visibility="collapsed")
         current_activity_data.append({"日程": date_input, "事業内容報告": content_input})
 
-    # This button adds more rows to the input, but doesn't submit the form
-    if st.button("事業内容報告を追加", key="add_current_activity_button"): # Changed key to avoid conflict
+    if st.button("事業内容報告を追加", key="add_current_activity_button"):
         st.session_state.num_current_activities += 1
         st.rerun()
 
     current_activities_df = pd.DataFrame(current_activity_data).dropna(how='all')
 
-    st.subheader("4. 活動の反省と課題") # 仕様書4
+    # --- Start of Section 4 (Reflections and Challenges) ---
+    st.subheader("4. 活動の反省と課題")
     # Set height for a larger text area
+    reflections_input_value = st.session_state.get('reflections', '') # Ensure this gets the latest value
     reflections = st.text_area(
         "次年度以降の改善材料になりますので詳細にお願いします。",
-        value=st.session_state.get('reflections', ''),
-        key="reflections_input",
-        height=200 # 大きめの入力欄
+        value=reflections_input_value, # Use the retrieved value
+        key="reflections_input_area", # Changed key to avoid potential conflict if any
+        height=100 # 大きめの入力欄
     )
-    st.session_state.reflections = reflections
+    st.session_state.reflections = reflections # Update session state with current input
+    # --- End of Section 4 ---
 
-    st.subheader("5. 次回運営委員会までの活動予定 (枠内下部)") # 仕様書5
+    st.subheader("5. 次回運営委員会までの活動予定 (枠内下部)")
     st.write("次回までの活動日程と内容をそれぞれ入力してください。")
 
     next_activity_data = []
@@ -199,21 +193,19 @@ with st.form("report_form"):
             content_input = st.text_area(f"活動予定 {i+1}", key=f"next_content_{i}", height=50, label_visibility="collapsed")
         next_activity_data.append({"日程": date_input, "次回運営委員会までの活動予定": content_input})
 
-    # This button adds more rows to the input, but doesn't submit the form
-    if st.button("活動予定を追加", key="add_next_activity_button"): # Changed key to avoid conflict
+    if st.button("活動予定を追加", key="add_next_activity_button"):
         st.session_state.num_next_activities += 1
         st.rerun()
 
     next_activities_df = pd.DataFrame(next_activity_data).dropna(how='all')
 
     # --- This is the ONLY submit button for the entire form ---
-    submitted = st.form_submit_button("入力完了 - プレビュー表示 (6. 入力完了ボタン)") # 仕様書6
+    submitted = st.form_submit_button("入力完了 - プレビュー表示 (6. 入力完了ボタン)")
 # --- End of the main form definition ---
 
 if submitted:
     st.subheader("完成版プレビュー")
 
-    # Display a basic HTML/Markdown preview
     st.markdown(f"<div style='text-align: center; font-weight: bold;'>***運営委員会にて提出をお願いします***</div>", unsafe_allow_html=True)
     st.markdown(f"<div style='text-align: center; font-weight: bold; font-size: 24px;'>事業内容報告書</div>", unsafe_allow_html=True)
     
@@ -236,7 +228,7 @@ if submitted:
     st.dataframe(next_activities_df, use_container_width=True, hide_index=True)
     st.markdown("<hr style='border: 0; height: 1px; background: #333; margin: 1em 0;' />")
 
-    st.subheader("PDFダウンロード (7. ダウンロードボタン)") # 仕様書7
+    st.subheader("PDFダウンロード (7. ダウンロードボタン)")
     pdf_output = create_pdf(report_date, department, current_activities_df, reflections, next_activities_df)
     st.download_button(
         label="PDFをダウンロード",
